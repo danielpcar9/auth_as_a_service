@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from src.schemas.user import UserCreate, UserRead
+from src.schemas import UserCreate, UserRead
 from src.services.auth_service import AuthService
 from src.db.session import get_db
 from sqlalchemy.orm import Session

@@ -1,21 +1,22 @@
-from fastapi import HTTPException, status
-from src.crud.user import CRUDUser
-from src.schemas.user import UserCreate, UserRead
-from src.db.session import get_db
+from fastapi import HTTPException
+from src.crud import user_crud
+from src.schemas import UserCreate, UserRead
 from sqlalchemy.orm import Session
-from typing import Annotated
-from fastapi import Depends
-
-crud_user = CRUDUser()
 
 class AuthService:
+    """
+    AuthService handles authentication business logic.
+    """
     def register(
         self,
         db: Session,
         user_in: UserCreate
     ) -> UserRead:
-        if crud_user.get_by_email(db, user_in.email):
+        """
+        Register a new user.
+        """
+        if user_crud.get_by_email(db, user_in.email):
             raise HTTPException(status_code=400, detail="Email already registered")
 
-        user = crud_user.create(db, user_in.email, user_in.password, user_in.full_name)
-        return UserRead.from_orm(user)
+        user = user_crud.create(db, obj_in=user_in)
+        return UserRead.model_validate(user)
