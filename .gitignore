@@ -21,3 +21,4 @@ uv.lock
 # IDEs
 .vscode/
 .idea/
+auth.db
