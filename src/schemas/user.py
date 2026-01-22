@@ -1,19 +1,26 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
+from datetime import datetime
 
 class UserBase(BaseModel):
-    email: Optional[EmailStr] = None
-    is_active: Optional[bool] = True
+    email: EmailStr
+    full_name: Optional[str] = None
 
 class UserCreate(UserBase):
+    password: str = Field(..., min_length=8)
+
+class UserRead(UserBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True  # Permite convertir desde ORM
+
+class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
-class UserUpdate(UserBase):
-    password: Optional[str] = None
-
-class User(UserBase):
-    id: int
-
-    class Config:
-        from_attributes = True
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
