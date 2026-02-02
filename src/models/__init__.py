@@ -1,1 +1,1 @@
-from .user import User, Base
+from .user import User as User, Base as Base
