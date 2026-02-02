@@ -17,6 +17,10 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+# Alias for compatibility
+hash_password = get_password_hash
+
+
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """Create JWT access token"""
     to_encode = data.copy()
