@@ -1,6 +1,17 @@
 from fastapi import APIRouter
-from src.api.v1.endpoints.auth import router as auth_router
+from src.api.v1.endpoints import auth, fraud
 
-api_router = APIRouter(prefix="/v1")
+api_router = APIRouter()
 
-api_router.include_router(auth_router)
+
+api_router.include_router(
+    auth.router,
+    prefix="/auth",
+    tags=["Authentication"]
+)
+
+api_router.include_router(
+    fraud.router,
+    prefix="/fraud",
+    tags=["Fraud Detection"]
+)
