@@ -62,7 +62,7 @@ class CRUDLoginAttempt(CRUDBase[LoginAttempt, LoginAttemptCreate, LoginAttemptRe
             .select_from(LoginAttempt)
             .where(
                 LoginAttempt.email == email,
-                LoginAttempt.success == False,
+                LoginAttempt.success.is_(False),
                 LoginAttempt.attempted_at >= cutoff_time
             )
         )
