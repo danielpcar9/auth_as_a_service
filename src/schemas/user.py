@@ -17,6 +17,8 @@ class UserRead(UserBase):
     class Config:
         from_attributes = True  # Permite convertir desde ORM
 
+UserResponse = UserRead
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str

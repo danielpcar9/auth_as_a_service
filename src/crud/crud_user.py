@@ -24,3 +24,6 @@ class CRUDUser(CRUDBase[User, UserCreate, UserCreate]):
         db.commit()
         db.refresh(db_obj)
         return db_obj
+
+# Singleton instance
+user_crud = CRUDUser()

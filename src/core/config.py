@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Database
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/auth_db"
+    DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/auth_db"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

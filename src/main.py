@@ -23,9 +23,6 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.0.0",
     description="Authentication service with ML-powered fraud detection",
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url=f"{settings.API_V1_STR}/docs",
-    redoc_url=f"{settings.API_V1_STR}/redoc",
     lifespan=lifespan
 )
 
@@ -47,7 +44,7 @@ def root():
     """Root endpoint"""
     return {
         "message": "Auth Service with Fraud Detection",
-        "docs": f"{settings.API_V1_STR}/docs",
+        "docs": "/docs",
         "version": "1.0.0"
     }
 
