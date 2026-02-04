@@ -76,7 +76,12 @@ docker-compose logs -f api
 |--------|----------|-------------|
 | POST | `/api/v1/auth/register` | Register new user |
 | POST | `/api/v1/auth/login` | Login and get JWT token |
-| GET | `/api/v1/auth/me` | Get current user (protected) |
+
+### Users
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/users/me` | Get current user (protected) |
 
 ### Fraud Detection
 
