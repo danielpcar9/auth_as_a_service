@@ -39,7 +39,7 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
-@app.get("/")
+@app.get("/", tags=["System"])
 def root():
     """Root endpoint"""
     return {
@@ -49,7 +49,7 @@ def root():
     }
 
 
-@app.get("/health")
+@app.get("/health", tags=["System"])
 def health_check():
     """Health check for load balancers"""
     return {"status": "healthy", "service": "auth-service"}
