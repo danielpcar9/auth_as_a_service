@@ -5,8 +5,6 @@ from src.core.config import settings
 from src.db.base import Base
 
 # Import all models here for Alembic to detect them
-from src.models.user import User
-from src.models.login_attempt import LoginAttempt
 
 # Alembic Config object
 config = context.config

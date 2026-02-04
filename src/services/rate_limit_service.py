@@ -1,5 +1,4 @@
 from src.core.redis import redis_client
-from src.core.config import settings
 
 class RateLimitService:
     """

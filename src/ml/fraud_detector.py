@@ -66,7 +66,7 @@ class FraudDetector:
             parts = ip.split('.')
             if len(parts) == 4:
                 return sum(int(part) * (256 ** (3 - i)) for i, part in enumerate(parts))
-        except:
+        except Exception:
             pass
         return hash(ip) % 1000000
     
