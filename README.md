@@ -4,11 +4,11 @@ A production-ready authentication service with ML-powered fraud detection using 
 
 ## 🎯 Features
 
-- ✅ **User Authentication**: Registration, login with JWT tokens
+- ✅ **User Authentication**: Registration, multi-device login with Sanctum-style opaque tokens
 - 🤖 **ML Fraud Detection**: Isolation Forest algorithm detects suspicious login patterns
 - 🚦 **Rate Limiting**: Prevents brute-force attacks
 - 📊 **Login Tracking**: Comprehensive logging of all authentication attempts
-- 🔒 **Security**: Password hashing with bcrypt, JWT tokens
+- 🔒 **Security**: Password hashing with bcrypt, SHA-256 token hashing, granular revocation
 - 🐳 **Docker Ready**: Complete docker-compose setup
 - ✅ **Tested**: Comprehensive test suite with pytest
 
@@ -75,7 +75,15 @@ docker-compose logs -f api
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/v1/auth/register` | Register new user |
-| POST | `/api/v1/auth/login` | Login and get JWT token |
+| POST | `/api/v1/auth/login` | Login and get an opaque access token |
+
+### Tokens (Device Management)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/tokens/` | List all active tokens (devices) for current user |
+| DELETE | `/api/v1/tokens/{id}` | Revoke a specific token (logout from one device) |
+| DELETE | `/api/v1/tokens/` | Revoke all tokens (logout everywhere) |
 
 ### Users
 
@@ -147,6 +155,14 @@ The model automatically predicts fraud probability on every login attempt. If `f
 - `hour_of_day`, `day_of_week`: ML features
 - `fraud_score`: ML prediction
 - `attempted_at`: Timestamp, indexed
+
+### Personal Access Tokens Table (Sanctum-style)
+- `id`: Primary key
+- `user_id`: Foreign key -> users.id
+- `name`: Device or client name
+- `token`: SHA-256 hash of the transparent token (unique, indexed)
+- `abilities`: JSON array of scopes/permissions
+- `last_used_at`, `expires_at`, `created_at`: Timestamps
 
 ## 🔧 Configuration
 
