@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Sequence
 from sqlalchemy import select, func
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.crud.base import CRUDBase
 from src.models.login_attempt import LoginAttempt
 from src.schemas.fraud import LoginAttemptCreate, LoginAttemptResponse
@@ -10,9 +10,9 @@ from src.schemas.fraud import LoginAttemptCreate, LoginAttemptResponse
 class CRUDLoginAttempt(CRUDBase[LoginAttempt, LoginAttemptCreate, LoginAttemptResponse]):
     """LoginAttempt-specific CRUD operations"""
     
-    def get_recent_attempts_by_email(
+    async def get_recent_attempts_by_email(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         *, 
         email: str, 
         minutes: int = 60
@@ -27,11 +27,12 @@ class CRUDLoginAttempt(CRUDBase[LoginAttempt, LoginAttemptCreate, LoginAttemptRe
             )
             .order_by(LoginAttempt.attempted_at.desc())
         )
-        return db.execute(stmt).scalars().all()
+        result = await db.execute(stmt)
+        return result.scalars().all()
     
-    def get_recent_attempts_by_ip(
+    async def get_recent_attempts_by_ip(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         *, 
         ip_address: str, 
         minutes: int = 60
@@ -46,11 +47,12 @@ class CRUDLoginAttempt(CRUDBase[LoginAttempt, LoginAttemptCreate, LoginAttemptRe
             )
             .order_by(LoginAttempt.attempted_at.desc())
         )
-        return db.execute(stmt).scalars().all()
+        result = await db.execute(stmt)
+        return result.scalars().all()
     
-    def count_failed_attempts(
+    async def count_failed_attempts(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         *, 
         email: str, 
         minutes: int = 5
@@ -66,11 +68,12 @@ class CRUDLoginAttempt(CRUDBase[LoginAttempt, LoginAttemptCreate, LoginAttemptRe
                 LoginAttempt.attempted_at >= cutoff_time
             )
         )
-        return db.execute(stmt).scalar_one()
+        result = await db.execute(stmt)
+        return result.scalar_one()
     
-    def get_all_for_training(
+    async def get_all_for_training(
         self, 
-        db: Session, 
+        db: AsyncSession, 
         limit: int = 10000
     ) -> Sequence[LoginAttempt]:
         """Get all login attempts for ML training"""
@@ -79,7 +82,8 @@ class CRUDLoginAttempt(CRUDBase[LoginAttempt, LoginAttemptCreate, LoginAttemptRe
             .order_by(LoginAttempt.attempted_at.desc())
             .limit(limit)
         )
-        return db.execute(stmt).scalars().all()
+        result = await db.execute(stmt)
+        return result.scalars().all()
 
 
 # Singleton instance

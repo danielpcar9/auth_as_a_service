@@ -1,7 +1,7 @@
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 ModelType = TypeVar("ModelType", bound=Any)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
@@ -11,22 +11,23 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     def __init__(self, model: Type[ModelType]):
         self.model = model
 
-    def get(self, db: Session, obj_id: Any) -> Optional[ModelType]:
+    async def get(self, db: AsyncSession, obj_id: Any) -> Optional[ModelType]:
         """
         Get a record by ID.
         """
-        return db.get(self.model, obj_id)
+        return await db.get(self.model, obj_id)
 
-    def get_multi(
-        self, db: Session, *, skip: int = 0, limit: int = 100
+    async def get_multi(
+        self, db: AsyncSession, *, skip: int = 0, limit: int = 100
     ) -> List[ModelType]:
         """
         Get multiple records.
         """
         stmt = select(self.model).offset(skip).limit(limit)
-        return list(db.execute(stmt).scalars().all())
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
 
-    def create(self, db: Session, *, obj_in: Union[CreateSchemaType, Dict[str, Any]]) -> ModelType:
+    async def create(self, db: AsyncSession, *, obj_in: Union[CreateSchemaType, Dict[str, Any]]) -> ModelType:
         """
         Create a record.
         """
@@ -36,13 +37,13 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             obj_in_data = obj_in.model_dump()
         db_obj = self.model(**obj_in_data)
         db.add(db_obj)
-        db.commit()
-        db.refresh(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
         return db_obj
 
-    def update(
+    async def update(
         self,
-        db: Session,
+        db: AsyncSession,
         *,
         db_obj: ModelType,
         obj_in: Union[UpdateSchemaType, Dict[str, Any]]
@@ -63,16 +64,16 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
                 setattr(db_obj, field, value)
 
         db.add(db_obj)
-        db.commit()
-        db.refresh(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
         return db_obj
 
-    def remove(self, db: Session, *, obj_id: Any) -> Optional[ModelType]:
+    async def remove(self, db: AsyncSession, *, obj_id: Any) -> Optional[ModelType]:
         """
         Remove a record.
         """
-        obj = db.get(self.model, obj_id)
+        obj = await db.get(self.model, obj_id)
         if obj:
-            db.delete(obj)
-            db.commit()
+            await db.delete(obj)
+            await db.commit()
         return obj
