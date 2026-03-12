@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, delete
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from src.crud.crud_user import user_crud
 from src.crud.crud_login_attempt import login_attempt_crud
@@ -27,24 +28,24 @@ class AuthService:
     fraud detection, and Sanctum-style token management.
     """
 
-    def register(
+    async def register(
         self,
-        db: Session,
+        db: AsyncSession,
         user_in: UserCreate
     ) -> UserResponse:
         """Register a new user."""
-        if user_crud.get_by_email(db, email=user_in.email):
+        if await user_crud.get_by_email(db, email=user_in.email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
 
-        user = user_crud.create(db, obj_in=user_in)
+        user = await user_crud.create(db, obj_in=user_in)
         return UserResponse.model_validate(user)
 
-    def login(
+    async def login(
         self,
-        db: Session,
+        db: AsyncSession,
         email: str,
         password: str,
         ip_address: str,
@@ -80,7 +81,7 @@ class AuthService:
         if fraud_score > settings.FRAUD_THRESHOLD:
             # Log suspicious attempt
             now = datetime.utcnow()
-            login_attempt_crud.create(db, obj_in={
+            await login_attempt_crud.create(db, obj_in={
                 "email": email,
                 "ip_address": ip_address,
                 "user_agent": user_agent,
@@ -95,7 +96,7 @@ class AuthService:
             )
 
         # 4. Authenticate User
-        user = user_crud.get_by_email(db, email=email)
+        user = await user_crud.get_by_email(db, email=email)
         if not user or not verify_password(password, user.hashed_password):
             # Increment rate limit attempts
             rate_limit_service.increment_attempts(ip_address, settings.RATE_LIMIT_WINDOW)
@@ -103,7 +104,7 @@ class AuthService:
 
             # Log failed attempt
             now = datetime.utcnow()
-            login_attempt_crud.create(db, obj_in={
+            await login_attempt_crud.create(db, obj_in={
                 "user_id": user.id if user else None,
                 "email": email,
                 "ip_address": ip_address,
@@ -124,7 +125,7 @@ class AuthService:
 
         # Log successful attempt
         now = datetime.utcnow()
-        login_attempt_crud.create(db, obj_in={
+        await login_attempt_crud.create(db, obj_in={
             "user_id": user.id,
             "email": email,
             "ip_address": ip_address,
@@ -149,7 +150,7 @@ class AuthService:
             expires_at=expires_at,
         )
         db.add(db_token)
-        db.commit()
+        await db.commit()
 
         # Return raw token — the ONLY time the client sees it
         return TokenResponse(
@@ -160,15 +161,16 @@ class AuthService:
             expires_at=expires_at,
         )
 
-    def logout(
+    async def logout(
         self,
-        db: Session,
+        db: AsyncSession,
         token_id: int,
         current_user: User,
     ) -> None:
         """Revoke a specific token by ID (single device logout)."""
         stmt = select(PersonalAccessToken).where(PersonalAccessToken.id == token_id)
-        db_token = db.execute(stmt).scalar_one_or_none()
+        result = await db.execute(stmt)
+        db_token = result.scalar_one_or_none()
 
         if not db_token or db_token.user_id != current_user.id:
             raise HTTPException(
@@ -176,24 +178,24 @@ class AuthService:
                 detail="Token not found"
             )
 
-        db.delete(db_token)
-        db.commit()
+        await db.delete(db_token)
+        await db.commit()
 
-    def logout_all(
+    async def logout_all(
         self,
-        db: Session,
+        db: AsyncSession,
         current_user: User,
     ) -> None:
         """Revoke all tokens for the current user (logout everywhere)."""
         stmt = delete(PersonalAccessToken).where(
             PersonalAccessToken.user_id == current_user.id
         )
-        db.execute(stmt)
-        db.commit()
+        await db.execute(stmt)
+        await db.commit()
 
-    def list_tokens(
+    async def list_tokens(
         self,
-        db: Session,
+        db: AsyncSession,
         current_user: User,
     ) -> list[PersonalAccessToken]:
         """List all active tokens for the current user."""
@@ -202,7 +204,8 @@ class AuthService:
             .where(PersonalAccessToken.user_id == current_user.id)
             .order_by(PersonalAccessToken.created_at.desc())
         )
-        return list(db.execute(stmt).scalars().all())
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
 
 
 auth_service = AuthService()

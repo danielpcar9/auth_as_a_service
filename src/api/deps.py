@@ -4,7 +4,8 @@ from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from src.db.session import get_db
 from src.models.user import User
@@ -14,8 +15,8 @@ from datetime import datetime
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
-def get_current_user(
-    db: Annotated[Session, Depends(get_db)],
+async def get_current_user(
+    db: Annotated[AsyncSession, Depends(get_db)],
     token: Annotated[str, Depends(oauth2_scheme)]
 ) -> User:
     """
@@ -38,7 +39,8 @@ def get_current_user(
         .options(joinedload(PersonalAccessToken.user))
         .where(PersonalAccessToken.token == token_hash)
     )
-    db_token = db.execute(stmt).scalar_one_or_none()
+    result = await db.execute(stmt)
+    db_token = result.scalar_one_or_none()
 
     if db_token is None:
         raise credentials_exception
@@ -60,13 +62,13 @@ def get_current_user(
 
     # Update last_used_at
     db_token.last_used_at = datetime.utcnow()
-    db.commit()
+    await db.commit()
 
     return db_token.user
 
 
-def _get_token_from_db(
-    db: Session,
+async def _get_token_from_db(
+    db: AsyncSession,
     token: str,
 ) -> PersonalAccessToken:
     """Internal helper: resolve raw bearer token → PersonalAccessToken."""
@@ -76,7 +78,8 @@ def _get_token_from_db(
         .options(joinedload(PersonalAccessToken.user))
         .where(PersonalAccessToken.token == token_hash)
     )
-    db_token = db.execute(stmt).scalar_one_or_none()
+    result = await db.execute(stmt)
+    db_token = result.scalar_one_or_none()
 
     if db_token is None:
         raise HTTPException(
@@ -102,11 +105,11 @@ def require_ability(ability: str) -> Callable:
     Usage:
         @router.get("/admin", dependencies=[Depends(require_ability("admin"))])
     """
-    def dependency(
-        db: Annotated[Session, Depends(get_db)],
+    async def dependency(
+        db: Annotated[AsyncSession, Depends(get_db)],
         token: Annotated[str, Depends(oauth2_scheme)],
     ) -> User:
-        db_token = _get_token_from_db(db, token)
+        db_token = await _get_token_from_db(db, token)
 
         if not db_token.can(ability):
             raise HTTPException(
@@ -116,7 +119,7 @@ def require_ability(ability: str) -> Callable:
 
         # Update last_used_at
         db_token.last_used_at = datetime.utcnow()
-        db.commit()
+        await db.commit()
 
         return db_token.user
 
