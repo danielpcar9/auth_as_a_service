@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, status, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, status, Request
 from src.auth.dependencies import get_auth_service, get_client_ip, get_user_agent
 from src.auth.service import AuthService
 from src.auth.schemas import LoginRequest
@@ -31,13 +31,14 @@ async def register(
 async def login(
     credentials: LoginRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     service: Annotated[AuthService, Depends(get_auth_service)]
 ) -> TokenResponse:
     """Authenticate user and obtain access token"""
     ip_address = get_client_ip(request)
     user_agent = get_user_agent(request)
-    
-    return await service.login(
+
+    token_response, log_callback = await service.login(
         email=credentials.email,
         password=credentials.password,
         ip_address=ip_address,
@@ -45,3 +46,8 @@ async def login(
         device_name=credentials.device_name,
         abilities=credentials.abilities,
     )
+
+    # Schedule success audit log as a background task — user gets token immediately
+    background_tasks.add_task(log_callback)
+
+    return token_response
