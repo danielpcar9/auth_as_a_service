@@ -1,6 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_db, get_current_user
 from src.schemas.auth import TokenListItem
@@ -20,12 +20,12 @@ router = APIRouter()
         401: {"description": "Not authenticated"},
     },
 )
-def list_tokens(
-    db: Annotated[Session, Depends(get_db)],
+async def list_tokens(
+    db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[TokenListItem]:
     """List all tokens/devices for the authenticated user"""
-    tokens = auth_service.list_tokens(db, current_user)
+    tokens = await auth_service.list_tokens(db, current_user)
     return [TokenListItem.model_validate(t) for t in tokens]
 
 
@@ -40,13 +40,13 @@ def list_tokens(
         404: {"description": "Token not found"},
     },
 )
-def revoke_token(
+async def revoke_token(
     token_id: int,
-    db: Annotated[Session, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
     """Revoke a single token (logout from one device)"""
-    auth_service.logout(db, token_id=token_id, current_user=current_user)
+    await auth_service.logout(db, token_id=token_id, current_user=current_user)
 
 
 @router.delete(
@@ -59,9 +59,9 @@ def revoke_token(
         401: {"description": "Not authenticated"},
     },
 )
-def revoke_all_tokens(
-    db: Annotated[Session, Depends(get_db)],
+async def revoke_all_tokens(
+    db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
     """Revoke all tokens (logout everywhere)"""
-    auth_service.logout_all(db, current_user=current_user)
+    await auth_service.logout_all(db, current_user=current_user)

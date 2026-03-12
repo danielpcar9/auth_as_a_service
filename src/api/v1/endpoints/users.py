@@ -17,7 +17,7 @@ router = APIRouter()
         401: {"description": "Not authenticated"},
     }
 )
-def get_me(
+async def get_me(
     current_user: Annotated[User, Depends(get_current_user)]
 ) -> UserResponse:
     """Get current authenticated user"""

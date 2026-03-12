@@ -1,6 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import numpy as np
 from src.api.deps import get_db
 from src.schemas.fraud import FraudPredictionRequest, FraudPredictionResponse
@@ -19,7 +19,7 @@ router = APIRouter()
         200: {"description": "Fraud prediction successful"},
     }
 )
-def predict_fraud(
+async def predict_fraud(
     request: FraudPredictionRequest
 ) -> FraudPredictionResponse:
     """Predict if a login attempt is fraudulent"""
@@ -41,12 +41,12 @@ def predict_fraud(
         400: {"description": "Not enough data for training"},
     }
 )
-def train_model(
-    db: Annotated[Session, Depends(get_db)]
+async def train_model(
+    db: Annotated[AsyncSession, Depends(get_db)]
 ):
     """Train fraud detection model with historical login attempts"""
     # Get all historical attempts
-    attempts = login_attempt_crud.get_all_for_training(db, limit=10000)
+    attempts = await login_attempt_crud.get_all_for_training(db, limit=10000)
     
     if len(attempts) < 100:
         raise HTTPException(
@@ -82,7 +82,7 @@ def train_model(
     summary="Get model status",
     description="Check if fraud detection model is trained and ready"
 )
-def get_model_status():
+async def get_model_status():
     """Get fraud detection model status"""
     return {
         "is_trained": fraud_detector.is_trained,

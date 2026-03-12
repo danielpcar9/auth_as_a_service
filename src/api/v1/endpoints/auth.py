@@ -1,6 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, status, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_db, get_current_user, get_client_ip, get_user_agent
 from src.schemas.user import UserCreate, UserResponse
 from src.schemas.auth import TokenResponse, LoginRequest
@@ -21,12 +21,12 @@ router = APIRouter()
         400: {"description": "Email already registered"},
     }
 )
-def register(
+async def register(
     user_in: UserCreate,
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)]
 ) -> UserResponse:
     """Register a new user account"""
-    return auth_service.register(db, user_in=user_in)
+    return await auth_service.register(db, user_in=user_in)
 
 
 @router.post(
@@ -41,16 +41,16 @@ def register(
         429: {"description": "Too many failed attempts"},
     }
 )
-def login(
+async def login(
     credentials: LoginRequest,
     request: Request,
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)]
 ) -> TokenResponse:
     """Authenticate user and obtain access token"""
     ip_address = get_client_ip(request)
     user_agent = get_user_agent(request)
 
-    return auth_service.login(
+    return await auth_service.login(
         db,
         email=credentials.email,
         password=credentials.password,
