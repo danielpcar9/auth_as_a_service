@@ -2,7 +2,9 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
-from src.db.base import Base
+from sqlmodel import SQLModel
+import src.models_registry  # ensure all models are registered
+
 from src.db.session import get_db
 from src.main import app
 
@@ -21,10 +23,10 @@ TestingAsyncSession = async_sessionmaker(
 async def setup_db():
     """Create tables before each test, drop after."""
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(SQLModel.metadata.create_all)
     yield
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(SQLModel.metadata.drop_all)
 
 
 @pytest.fixture

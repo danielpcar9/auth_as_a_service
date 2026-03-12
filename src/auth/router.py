@@ -1,14 +1,12 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, status, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.api.deps import get_db, get_current_user, get_client_ip, get_user_agent
-from src.schemas.user import UserCreate, UserResponse
-from src.schemas.auth import TokenResponse, LoginRequest
-from src.services.auth_service import auth_service
-from src.models.user import User
+from src.auth.dependencies import get_auth_service, get_client_ip, get_user_agent
+from src.auth.service import AuthService
+from src.auth.schemas import LoginRequest
+from src.users.models import UserCreate, UserResponse
+from src.tokens.models import TokenResponse
 
-router = APIRouter()
-
+router = APIRouter(tags=["auth"])
 
 @router.post(
     "/register",
@@ -16,42 +14,30 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
     summary="Register new user",
     description="Create a new user account with email and password",
-    responses={
-        201: {"description": "User successfully created"},
-        400: {"description": "Email already registered"},
-    }
 )
 async def register(
     user_in: UserCreate,
-    db: Annotated[AsyncSession, Depends(get_db)]
+    service: Annotated[AuthService, Depends(get_auth_service)]
 ) -> UserResponse:
     """Register a new user account"""
-    return await auth_service.register(db, user_in=user_in)
-
+    return await service.register(user_in=user_in)
 
 @router.post(
     "/login",
     response_model=TokenResponse,
     summary="Login user",
     description="Authenticate user and return opaque bearer token with fraud detection",
-    responses={
-        200: {"description": "Login successful"},
-        401: {"description": "Invalid credentials"},
-        403: {"description": "User inactive or suspicious activity detected"},
-        429: {"description": "Too many failed attempts"},
-    }
 )
 async def login(
     credentials: LoginRequest,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)]
+    service: Annotated[AuthService, Depends(get_auth_service)]
 ) -> TokenResponse:
     """Authenticate user and obtain access token"""
     ip_address = get_client_ip(request)
     user_agent = get_user_agent(request)
-
-    return await auth_service.login(
-        db,
+    
+    return await service.login(
         email=credentials.email,
         password=credentials.password,
         ip_address=ip_address,

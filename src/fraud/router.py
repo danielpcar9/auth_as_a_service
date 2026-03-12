@@ -1,52 +1,50 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-import numpy as np
-from src.api.deps import get_db
-from src.schemas.fraud import FraudPredictionRequest, FraudPredictionResponse
-from src.ml.fraud_detector import fraud_detector
-from src.crud.crud_login_attempt import login_attempt_crud
+from src.fraud.dependencies import get_fraud_service
+from src.fraud.service import FraudService
+from src.fraud.models import FraudPredictionRequest, FraudPredictionResponse
 
-router = APIRouter()
-
+router = APIRouter(tags=["fraud-detection"])
 
 @router.post(
     "/predict",
     response_model=FraudPredictionResponse,
     summary="Predict fraud probability",
     description="Analyze login attempt and return fraud probability",
-    responses={
-        200: {"description": "Fraud prediction successful"},
-    }
 )
-async def predict_fraud(
-    request: FraudPredictionRequest
+def predict_fraud(
+    request: FraudPredictionRequest,
+    service: Annotated[FraudService, Depends(get_fraud_service)]
 ) -> FraudPredictionResponse:
     """Predict if a login attempt is fraudulent"""
-    prediction = fraud_detector.predict(
+    # ml prediction is CPU-bound so it runs sync
+    fraud_score = service.predict_fraud(
         email=request.email,
         ip_address=request.ip_address,
         user_agent=request.user_agent
     )
     
-    return FraudPredictionResponse(**prediction)
-
+    # We could reconstruct the dict, but here logic is embedded
+    is_suspicious = fraud_score > 0.8  # Could read from settings
+    risk_level = "high" if is_suspicious else "low"
+    
+    return FraudPredictionResponse(
+        fraud_score=fraud_score,
+        is_suspicious=is_suspicious,
+        risk_level=risk_level,
+        features_used=service.detector.extract_features(request.email, request.ip_address, request.user_agent)
+    )
 
 @router.post(
     "/train",
     summary="Train fraud detection model",
     description="Retrain the fraud detection model with historical data",
-    responses={
-        200: {"description": "Model trained successfully"},
-        400: {"description": "Not enough data for training"},
-    }
 )
 async def train_model(
-    db: Annotated[AsyncSession, Depends(get_db)]
+    service: Annotated[FraudService, Depends(get_fraud_service)]
 ):
     """Train fraud detection model with historical login attempts"""
-    # Get all historical attempts
-    attempts = await login_attempt_crud.get_all_for_training(db, limit=10000)
+    attempts = await service.get_all_for_training(limit=10000)
     
     if len(attempts) < 100:
         raise HTTPException(
@@ -54,10 +52,9 @@ async def train_model(
             detail=f"Not enough data for training. Have {len(attempts)}, need at least 100."
         )
     
-    # Extract features
     features_list = []
     for attempt in attempts:
-        features = fraud_detector.extract_features(
+        features = service.detector.extract_features(
             email=attempt.email,
             ip_address=attempt.ip_address,
             user_agent=attempt.user_agent,
@@ -65,28 +62,26 @@ async def train_model(
         )
         features_list.append(list(features.values()))
     
-    X = np.array(features_list)
-    
-    # Train model
-    fraud_detector.train(X)
+    service.retrain_model(features_list)
     
     return {
         "message": "Model trained successfully",
         "samples_used": len(attempts),
-        "features": list(fraud_detector.extract_features("test@test.com", "0.0.0.0", None).keys())
+        "features": list(service.detector.extract_features("test@test.com", "0.0.0.0", None).keys())
     }
-
 
 @router.get(
     "/status",
     summary="Get model status",
     description="Check if fraud detection model is trained and ready"
 )
-async def get_model_status():
+def get_model_status(
+    service: Annotated[FraudService, Depends(get_fraud_service)]
+):
     """Get fraud detection model status"""
     return {
-        "is_trained": fraud_detector.is_trained,
+        "is_trained": service.detector.is_trained,
         "model_type": "IsolationForest",
-        "model_path": str(fraud_detector.model_path),
-        "features": list(fraud_detector.extract_features("test@test.com", "0.0.0.0", None).keys())
+        "model_path": str(service.detector.model_path),
+        "features": list(service.detector.extract_features("test@test.com", "0.0.0.0", None).keys())
     }

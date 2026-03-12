@@ -1,13 +1,11 @@
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
+from sqlmodel import SQLModel
 from src.core.config import settings
-from src.db.base import Base
 
 # Import all models here for Alembic to detect them
-from src.models.user import User  # noqa: F401
-from src.models.login_attempt import LoginAttempt  # noqa: F401
-from src.models.personal_access_token import PersonalAccessToken  # noqa: F401
+import src.models_registry  # noqa: F401
 
 # Alembic Config object
 config = context.config
@@ -20,7 +18,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Model's MetaData for autogenerate support
-target_metadata = Base.metadata
+target_metadata = SQLModel.metadata
 
 
 def run_migrations_offline() -> None:

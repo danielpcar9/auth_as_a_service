@@ -10,8 +10,8 @@ from unittest.mock import patch, MagicMock
 from src.db.base import Base
 from src.db.session import get_db
 from src.main import app
-from src.models.user import User
-from src.models.personal_access_token import PersonalAccessToken
+from src.users.models import User
+from src.tokens.models import PersonalAccessToken
 
 import bcrypt
 
@@ -56,9 +56,9 @@ def _mock_rate_limit_and_fraud():
         return bcrypt.checkpw(plain.encode(), hashed.encode())
 
     return (
-        patch("src.services.auth_service.rate_limit_service", rate_limit_mock),
-        patch("src.services.auth_service.fraud_detector", fraud_mock),
-        patch("src.services.auth_service.verify_password", _verify_password),
+        patch("src.auth.service.rate_limit_service", rate_limit_mock),
+        patch("src.fraud.service.fraud_detector", fraud_mock),
+        patch("src.auth.service.verify_password", _verify_password),
     )
 
 
@@ -84,7 +84,7 @@ async def test_login_creates_token_in_db(client: AsyncClient, db: AsyncSession, 
     assert response.status_code == 200
     data = response.json()
     assert data["token_type"] == "bearer"
-    assert data["device_name"] == "Test Device"
+    assert data["name"] == "Test Device"
     assert data["abilities"] == ["read", "write"]
     assert data["expires_at"] is not None
 
@@ -286,7 +286,7 @@ async def test_invalid_token_returns_401(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_wrong_ability_returns_403(client: AsyncClient, db: AsyncSession, test_user: User):
     """Token with limited abilities should get 403 on restricted route."""
-    from src.api.deps import require_ability
+    from src.auth.dependencies import require_ability
     from fastapi import Depends, APIRouter
 
     # Create a temporary test route requiring "admin" ability
@@ -324,7 +324,7 @@ async def test_wrong_ability_returns_403(client: AsyncClient, db: AsyncSession, 
 @pytest.mark.asyncio
 async def test_wildcard_ability_passes(client: AsyncClient, db: AsyncSession, test_user: User):
     """Token with ["*"] should pass any ability check."""
-    from src.api.deps import require_ability
+    from src.auth.dependencies import require_ability
     from fastapi import Depends, APIRouter
 
     test_router = APIRouter()
