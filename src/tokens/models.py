@@ -45,6 +45,8 @@ class PersonalAccessToken(TokenBase, table=True):
 
 class TokenResponse(TokenBase):
     """Schema for API returning a new token (includes raw access_token)"""
+    model_config = {"populate_by_name": True}
+
     access_token: str
     token_type: str = "bearer"
     device_name: str = Field(alias="name")

@@ -6,7 +6,7 @@ from src.users.models import UserCreate, UserResponse
 from src.tokens.models import TokenResponse
 from src.core.security import verify_password, get_password_hash
 from src.core.config import settings
-from src.services.rate_limit_service import rate_limit_service
+from src.core.rate_limit import rate_limit_service
 
 class AuthService:
     """Orchestrator domain service for authentication"""

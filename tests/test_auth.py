@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import patch, MagicMock
 
-from src.db.base import Base
 from src.db.session import get_db
 from src.main import app
 from src.users.models import User
