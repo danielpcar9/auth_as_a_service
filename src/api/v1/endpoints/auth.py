@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, status, Request
 from sqlalchemy.orm import Session
 from src.api.deps import get_db, get_current_user, get_client_ip, get_user_agent
 from src.schemas.user import UserCreate, UserResponse
-from src.schemas.auth import Token, LoginRequest
+from src.schemas.auth import TokenResponse, LoginRequest
 from src.services.auth_service import auth_service
 from src.models.user import User
 
@@ -31,9 +31,9 @@ def register(
 
 @router.post(
     "/login",
-    response_model=Token,
+    response_model=TokenResponse,
     summary="Login user",
-    description="Authenticate user and return JWT access token with fraud detection",
+    description="Authenticate user and return opaque bearer token with fraud detection",
     responses={
         200: {"description": "Login successful"},
         401: {"description": "Invalid credentials"},
@@ -45,15 +45,17 @@ def login(
     credentials: LoginRequest,
     request: Request,
     db: Annotated[Session, Depends(get_db)]
-) -> Token:
+) -> TokenResponse:
     """Authenticate user and obtain access token"""
     ip_address = get_client_ip(request)
     user_agent = get_user_agent(request)
-    
+
     return auth_service.login(
         db,
         email=credentials.email,
         password=credentials.password,
         ip_address=ip_address,
-        user_agent=user_agent
+        user_agent=user_agent,
+        device_name=credentials.device_name,
+        abilities=credentials.abilities,
     )

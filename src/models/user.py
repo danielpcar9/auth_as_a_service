@@ -24,6 +24,7 @@ class User(Base):
     
     # Relationships
     login_attempts = relationship("LoginAttempt", back_populates="user", cascade="all, delete-orphan")
+    tokens = relationship("PersonalAccessToken", back_populates="user", cascade="all, delete-orphan")
     
     # Composite index for common queries
     __table_args__ = (

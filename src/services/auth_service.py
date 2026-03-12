@@ -1,31 +1,41 @@
+import hashlib
+import secrets
+from datetime import datetime, timedelta
+
 from fastapi import HTTPException, status
+from sqlalchemy import select, delete
+from sqlalchemy.orm import Session, joinedload
+
 from src.crud.crud_user import user_crud
 from src.crud.crud_login_attempt import login_attempt_crud
 from src.schemas.user import UserCreate, UserResponse
-from src.schemas.auth import Token
-from src.core.security import verify_password, create_access_token
+from src.schemas.auth import TokenResponse
+from src.core.security import verify_password
 from src.core.config import settings
 from src.services.rate_limit_service import rate_limit_service
 from src.ml.fraud_detector import fraud_detector
-from sqlalchemy.orm import Session
-from datetime import datetime
+from src.models.personal_access_token import PersonalAccessToken
+from src.models.user import User
+
+# Token expiry: 30 days
+TOKEN_EXPIRY_DAYS = 30
+
 
 class AuthService:
     """
-    AuthService handles authentication business logic including rate limiting and fraud detection.
+    AuthService handles authentication business logic including rate limiting,
+    fraud detection, and Sanctum-style token management.
     """
-    
+
     def register(
         self,
         db: Session,
         user_in: UserCreate
     ) -> UserResponse:
-        """
-        Register a new user.
-        """
+        """Register a new user."""
         if user_crud.get_by_email(db, email=user_in.email):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, 
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
 
@@ -38,11 +48,17 @@ class AuthService:
         email: str,
         password: str,
         ip_address: str,
-        user_agent: str | None = None
-    ) -> Token:
+        user_agent: str | None = None,
+        device_name: str = "default",
+        abilities: list[str] | None = None,
+    ) -> TokenResponse:
         """
-        Authenticate user, check rate limits and fraud scores.
+        Authenticate user, check rate limits and fraud scores,
+        then create an opaque bearer token (Sanctum-style).
         """
+        if abilities is None:
+            abilities = ["*"]
+
         # 1. Check Rate Limiting (IP)
         if rate_limit_service.is_rate_limited(ip_address, settings.MAX_LOGIN_ATTEMPTS, settings.RATE_LIMIT_WINDOW):
             raise HTTPException(
@@ -84,7 +100,7 @@ class AuthService:
             # Increment rate limit attempts
             rate_limit_service.increment_attempts(ip_address, settings.RATE_LIMIT_WINDOW)
             rate_limit_service.increment_attempts(email, settings.RATE_LIMIT_WINDOW)
-            
+
             # Log failed attempt
             now = datetime.utcnow()
             login_attempt_crud.create(db, obj_in={
@@ -102,8 +118,7 @@ class AuthService:
                 detail="Invalid credentials"
             )
 
-        # 5. Success
-        # Reset rate limits
+        # 5. Success — Reset rate limits
         rate_limit_service.reset_attempts(ip_address)
         rate_limit_service.reset_attempts(email)
 
@@ -120,8 +135,74 @@ class AuthService:
             "day_of_week": now.weekday()
         })
 
-        # Generate token
-        access_token = create_access_token(data={"sub": user.email})
-        return Token(access_token=access_token, token_type="bearer")
+        # 6. Generate opaque token (Sanctum-style)
+        raw_token = secrets.token_hex(32)  # 64-char hex string
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+        expires_at = datetime.utcnow() + timedelta(days=TOKEN_EXPIRY_DAYS)
+
+        db_token = PersonalAccessToken(
+            user_id=user.id,
+            name=device_name,
+            token=token_hash,
+            abilities=abilities,
+            expires_at=expires_at,
+        )
+        db.add(db_token)
+        db.commit()
+
+        # Return raw token — the ONLY time the client sees it
+        return TokenResponse(
+            access_token=raw_token,
+            token_type="bearer",
+            device_name=device_name,
+            abilities=abilities,
+            expires_at=expires_at,
+        )
+
+    def logout(
+        self,
+        db: Session,
+        token_id: int,
+        current_user: User,
+    ) -> None:
+        """Revoke a specific token by ID (single device logout)."""
+        stmt = select(PersonalAccessToken).where(PersonalAccessToken.id == token_id)
+        db_token = db.execute(stmt).scalar_one_or_none()
+
+        if not db_token or db_token.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Token not found"
+            )
+
+        db.delete(db_token)
+        db.commit()
+
+    def logout_all(
+        self,
+        db: Session,
+        current_user: User,
+    ) -> None:
+        """Revoke all tokens for the current user (logout everywhere)."""
+        stmt = delete(PersonalAccessToken).where(
+            PersonalAccessToken.user_id == current_user.id
+        )
+        db.execute(stmt)
+        db.commit()
+
+    def list_tokens(
+        self,
+        db: Session,
+        current_user: User,
+    ) -> list[PersonalAccessToken]:
+        """List all active tokens for the current user."""
+        stmt = (
+            select(PersonalAccessToken)
+            .where(PersonalAccessToken.user_id == current_user.id)
+            .order_by(PersonalAccessToken.created_at.desc())
+        )
+        return list(db.execute(stmt).scalars().all())
+
 
 auth_service = AuthService()

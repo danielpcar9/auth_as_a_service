@@ -5,6 +5,9 @@ from src.core.config import settings
 from src.db.base import Base
 
 # Import all models here for Alembic to detect them
+from src.models.user import User  # noqa: F401
+from src.models.login_attempt import LoginAttempt  # noqa: F401
+from src.models.personal_access_token import PersonalAccessToken  # noqa: F401
 
 # Alembic Config object
 config = context.config
