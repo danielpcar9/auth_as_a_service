@@ -5,28 +5,31 @@ A production-ready authentication service with ML-powered fraud detection using 
 ## 🎯 Features
 
 - ✅ **User Authentication**: Registration, multi-device login with Sanctum-style opaque tokens
-- 🤖 **ML Fraud Detection**: Isolation Forest algorithm detects suspicious login patterns
-- 🚦 **Rate Limiting**: Prevents brute-force attacks
-- 📊 **Login Tracking**: Comprehensive logging of all authentication attempts
+- 🤖 **ML Fraud Detection**: Enhanced Isolation Forest algorithm with deterministic IP hashing and refined scoring
+- 📊 **Business Observability**: Prometheus-ready metrics for monitoring logins, fraud rates, and more
+- ⏳ **Async Training**: Background model training using FastAPI BackgroundTasks
+- 🚦 **Rate Limiting**: Redis-backed rate limiting to prevent brute-force attacks
 - 🔒 **Security**: Password hashing with bcrypt, SHA-256 token hashing, granular revocation
-- 🐳 **Docker Ready**: Complete docker-compose setup
-- ✅ **Tested**: Comprehensive test suite with pytest
+- 🐳 **Docker Ready**: Modern containerized setup with Docker Compose
+- ✅ **Tested**: Comprehensive test suite with pytest and structural improvements
 
 ## 🏗️ Architecture
 
 ```text
 User Request → FastAPI Endpoint → Service Layer → CRUD Layer → Database
+                      ↓                      ↓
+                 ML Fraud Detector      Business Metrics
+                      ↓                      ↓
+                 Redis (Rate Limit)     Prometheus (Exporter)
                       ↓
-                 ML Fraud Detector (Isolation Forest)
-                      ↓
-                 Redis (Rate Limiting)
+                 BackgroundTasks (Async ML Training)
 ```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Python 3.12+
-- uv (package manager)
+- [uv](https://github.com/astral-sh/uv) (package manager)
 - Docker & Docker Compose (optional)
 
 ### Local Development
@@ -85,19 +88,20 @@ docker-compose logs -f api
 | DELETE | `/api/v1/tokens/{id}` | Revoke a specific token (logout from one device) |
 | DELETE | `/api/v1/tokens/` | Revoke all tokens (logout everywhere) |
 
-### Users
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/users/me` | Get current user (protected) |
-
 ### Fraud Detection
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/fraud/predict` | Predict fraud probability |
-| POST | `/api/v1/fraud/train` | Train ML model with historical data |
-| GET | `/api/v1/fraud/status` | Get model status |
+| POST | `/api/v1/fraud/predict` | Predict fraud probability (manual check) |
+| POST | `/api/v1/fraud/train` | Trigger background model training |
+| GET | `/api/v1/fraud/status` | Get model health and status |
+
+### Metrics (Observability)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/metrics/` | Prometheus format metrics |
+| GET | `/api/v1/metrics/stats` | JSON summary statistics |
 
 ## 🧪 Testing
 
@@ -109,99 +113,48 @@ uv run pytest
 uv run pytest --cov=src tests/
 
 # Run specific test file
-uv run pytest tests/test_auth.py -v
+uv run pytest tests/test_improvements.py -v
 ```
 
 ## 🤖 ML Fraud Detection
 
-The service uses **Isolation Forest** to detect anomalous login patterns.
-
-### Features Used:
-- Hour of day
-- Day of week
-- Is weekend
-- Is night time
-- Email length
-- IP address (numeric hash)
-- User agent presence
-
-### Training:
-```bash
-# Register some users and perform logins
-# Then train the model
-curl -X POST http://localhost:8000/api/v1/fraud/train
-```
-
-### Prediction:
-The model automatically predicts fraud probability on every login attempt. If `fraud_score > 0.7`, the login is blocked.
+The service uses **Isolation Forest** to detect anomalous login patterns. Recent improvements include:
+- **Deterministic IP Hashing**: Stable representation of IP addresses as numerical features.
+- **Refined Scoring**: Better thresholding for high-risk attempts.
+- **Background Training**: Zero-downtime model updates via asynchronous tasks.
 
 ## 📊 Database Schema
 
 ### Users Table
-- `id`: Primary key
-- `email`: Unique, indexed
-- `hashed_password`: bcrypt hashed
-- `is_active`: Boolean
-- `is_verified`: Boolean
-- `created_at`, `updated_at`, `deleted_at`: Timestamps
+- `id`, `email`, `hashed_password`, `is_active`, `is_verified`
+- `created_at`, `updated_at`, `deleted_at`
 
 ### Login Attempts Table
-- `id`: Primary key
-- `user_id`: Foreign key (nullable)
-- `email`: Indexed
-- `ip_address`: Client IP
-- `user_agent`: Browser/client info
-- `success`: Boolean
+- `id`, `user_id`, `email`, `ip_address`, `user_agent`, `success`
 - `hour_of_day`, `day_of_week`: ML features
 - `fraud_score`: ML prediction
 - `attempted_at`: Timestamp, indexed
 
 ### Personal Access Tokens Table (Sanctum-style)
-- `id`: Primary key
-- `user_id`: Foreign key -> users.id
-- `name`: Device or client name
-- `token`: SHA-256 hash of the transparent token (unique, indexed)
-- `abilities`: JSON array of scopes/permissions
-- `last_used_at`, `expires_at`, `created_at`: Timestamps
-
-## 🔧 Configuration
-
-Key environment variables:
-
-```env
-SECRET_KEY=<your-secret-key>
-DATABASE_URL=postgresql://user:pass@host:port/db
-REDIS_URL=redis://host:port/0
-FRAUD_THRESHOLD=0.7
-MAX_LOGIN_ATTEMPTS=5
-```
+- `id`, `user_id`, `name`, `token` (SHA-256 hashed)
+- `abilities` (JSON scopes), `last_used_at`, `expires_at`, `created_at`
 
 ## 📈 Roadmap
 
-- [ ] Email verification
-- [ ] Refresh tokens
+- [ ] Email verification & MFA
+- [ ] Refresh tokens support
 - [ ] OAuth2 providers (Google, GitHub)
-- [ ] 2FA support
-- [ ] Advanced ML features (device fingerprinting)
-- [ ] Kubernetes deployment
-- [ ] Prometheus metrics
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-## 📝 License
-
-MIT License - see LICENSE file
+- [x] Prometheus & Grafana Integration
+- [x] Async Model Training
+- [ ] Kubernetes manifestation files
+- [ ] Advanced device fingerprinting
 
 ## 👤 Author
 
 Daniel Palomeque - [GitHub](https://github.com/danielpcar9)
 
 ---
+
+Built with ❤️ using FastAPI, scikit-learn, and modern Python practices.
 
 Built with ❤️ using FastAPI, scikit-learn, and modern Python practices.
