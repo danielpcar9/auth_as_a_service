@@ -4,6 +4,7 @@ from src.auth.router import router as auth_router
 from src.users.router import router as users_router
 from src.tokens.router import router as tokens_router
 from src.fraud.router import router as fraud_router
+from src.api.v1.metrics_router import router as metrics_router
 
 api_router = APIRouter()
 
@@ -12,3 +13,4 @@ api_router.include_router(auth_router, prefix="/auth")
 api_router.include_router(users_router, prefix="/users")
 api_router.include_router(tokens_router, prefix="/tokens")
 api_router.include_router(fraud_router, prefix="/fraud")
+api_router.include_router(metrics_router, prefix="/metrics")

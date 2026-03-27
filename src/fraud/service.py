@@ -4,7 +4,6 @@ from sqlmodel import select, col
 
 from src.fraud.models import LoginAttempt
 from src.ml.fraud_detector import fraud_detector
-from src.core.config import settings
 
 
 class FraudService:

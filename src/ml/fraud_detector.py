@@ -61,14 +61,21 @@ class FraudDetector:
         return features
     
     def _ip_to_numeric(self, ip: str) -> float:
-        """Convert IP to numeric value (simple hash)"""
+        """Convert IP (v4 or v6) to a deterministic numeric value.
+
+        Uses stdlib ipaddress for proper parsing. Falls back to a
+        deterministic SHA-256 hash for malformed strings (instead of
+        the built-in hash(), which varies across processes).
+        """
+        import ipaddress as _ipaddress
+        import hashlib as _hashlib
+
         try:
-            parts = ip.split('.')
-            if len(parts) == 4:
-                return sum(int(part) * (256 ** (3 - i)) for i, part in enumerate(parts))
-        except Exception:
-            pass
-        return hash(ip) % 1000000
+            return float(int(_ipaddress.ip_address(ip)))
+        except ValueError:
+            digest = _hashlib.sha256(ip.encode()).hexdigest()
+            # 12 hex chars → 48-bit integer, avoids float precision issues
+            return float(int(digest[:12], 16))
     
     def predict(
         self, 

@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 import pytest
 from httpx import AsyncClient
@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import patch, MagicMock
 
-from src.db.session import get_db
 from src.main import app
 from src.users.models import User
 from src.tokens.models import PersonalAccessToken
@@ -36,7 +35,7 @@ async def test_user(db: AsyncSession) -> User:
 
 
 def _mock_rate_limit_and_fraud():
-    """Context manager patches for rate limiting, fraud detection, and password verification."""
+    """Context manager patches for rate limiting, fraud detection, metrics, and password verification."""
     rate_limit_mock = MagicMock()
     rate_limit_mock.is_rate_limited.return_value = False
     rate_limit_mock.increment_attempts.return_value = None
@@ -50,6 +49,8 @@ def _mock_rate_limit_and_fraud():
         "features_used": {},
     }
 
+    metrics_mock = MagicMock()
+
     def _verify_password(plain: str, hashed: str) -> bool:
         """Verify using bcrypt directly (bypasses passlib bug)."""
         return bcrypt.checkpw(plain.encode(), hashed.encode())
@@ -58,6 +59,7 @@ def _mock_rate_limit_and_fraud():
         patch("src.auth.service.rate_limit_service", rate_limit_mock),
         patch("src.fraud.service.fraud_detector", fraud_mock),
         patch("src.auth.service.verify_password", _verify_password),
+        patch("src.auth.service.metrics_service", metrics_mock),
     )
 
 
@@ -68,8 +70,8 @@ def _mock_rate_limit_and_fraud():
 @pytest.mark.asyncio
 async def test_login_creates_token_in_db(client: AsyncClient, db: AsyncSession, test_user: User):
     """POST /login should return a raw token and store the SHA-256 hash in DB."""
-    rl_patch, fd_patch, vp_patch = _mock_rate_limit_and_fraud()
-    with rl_patch, fd_patch, vp_patch:
+    rl_patch, fd_patch, vp_patch, mp_patch = _mock_rate_limit_and_fraud()
+    with rl_patch, fd_patch, vp_patch, mp_patch:
         response = await client.post(
             "/api/v1/auth/login",
             json={
@@ -115,8 +117,8 @@ async def test_login_creates_token_in_db(client: AsyncClient, db: AsyncSession, 
 @pytest.mark.asyncio
 async def test_login_multiple_devices(client: AsyncClient, db: AsyncSession, test_user: User):
     """Two logins to different devices should create two separate tokens."""
-    rl_patch, fd_patch, vp_patch = _mock_rate_limit_and_fraud()
-    with rl_patch, fd_patch, vp_patch:
+    rl_patch, fd_patch, vp_patch, mp_patch = _mock_rate_limit_and_fraud()
+    with rl_patch, fd_patch, vp_patch, mp_patch:
         r1 = await client.post("/api/v1/auth/login", json={
             "email": "test@example.com",
             "password": "SecureP@ss123",
@@ -149,8 +151,8 @@ async def test_login_multiple_devices(client: AsyncClient, db: AsyncSession, tes
 @pytest.mark.asyncio
 async def test_logout_deletes_specific_token(client: AsyncClient, db: AsyncSession, test_user: User):
     """DELETE /tokens/{id} should remove only that token."""
-    rl_patch, fd_patch, vp_patch = _mock_rate_limit_and_fraud()
-    with rl_patch, fd_patch, vp_patch:
+    rl_patch, fd_patch, vp_patch, mp_patch = _mock_rate_limit_and_fraud()
+    with rl_patch, fd_patch, vp_patch, mp_patch:
         r1 = await client.post("/api/v1/auth/login", json={
             "email": "test@example.com", "password": "SecureP@ss123", "device_name": "Device A",
         })
@@ -196,8 +198,8 @@ async def test_logout_deletes_specific_token(client: AsyncClient, db: AsyncSessi
 @pytest.mark.asyncio
 async def test_logout_all_deletes_all_tokens(client: AsyncClient, db: AsyncSession, test_user: User):
     """DELETE /tokens/ should remove all tokens for the user."""
-    rl_patch, fd_patch, vp_patch = _mock_rate_limit_and_fraud()
-    with rl_patch, fd_patch, vp_patch:
+    rl_patch, fd_patch, vp_patch, mp_patch = _mock_rate_limit_and_fraud()
+    with rl_patch, fd_patch, vp_patch, mp_patch:
         r1 = await client.post("/api/v1/auth/login", json={
             "email": "test@example.com", "password": "SecureP@ss123", "device_name": "D1",
         })
@@ -238,8 +240,8 @@ async def test_logout_all_deletes_all_tokens(client: AsyncClient, db: AsyncSessi
 @pytest.mark.asyncio
 async def test_expired_token_returns_401(client: AsyncClient, db: AsyncSession, test_user: User):
     """Using an expired token should return 401."""
-    rl_patch, fd_patch, vp_patch = _mock_rate_limit_and_fraud()
-    with rl_patch, fd_patch, vp_patch:
+    rl_patch, fd_patch, vp_patch, mp_patch = _mock_rate_limit_and_fraud()
+    with rl_patch, fd_patch, vp_patch, mp_patch:
         resp = await client.post("/api/v1/auth/login", json={
             "email": "test@example.com", "password": "SecureP@ss123",
         })
@@ -252,7 +254,7 @@ async def test_expired_token_returns_401(client: AsyncClient, db: AsyncSession, 
         select(PersonalAccessToken).where(PersonalAccessToken.token == token_hash)
     )
     db_token = result.scalar_one()
-    db_token.expires_at = datetime.utcnow() - timedelta(hours=1)
+    db_token.expires_at = datetime.now(UTC) - timedelta(hours=1)
     await db.commit()
 
     # Try to use the expired token
@@ -298,8 +300,8 @@ async def test_wrong_ability_returns_403(client: AsyncClient, db: AsyncSession, 
     app.include_router(test_router, prefix="/api/v1")
 
     # Login with only "read" ability
-    rl_patch, fd_patch, vp_patch = _mock_rate_limit_and_fraud()
-    with rl_patch, fd_patch, vp_patch:
+    rl_patch, fd_patch, vp_patch, mp_patch = _mock_rate_limit_and_fraud()
+    with rl_patch, fd_patch, vp_patch, mp_patch:
         resp = await client.post("/api/v1/auth/login", json={
             "email": "test@example.com",
             "password": "SecureP@ss123",
@@ -335,8 +337,8 @@ async def test_wildcard_ability_passes(client: AsyncClient, db: AsyncSession, te
     app.include_router(test_router, prefix="/api/v1")
 
     # Login with wildcard abilities (default)
-    rl_patch, fd_patch, vp_patch = _mock_rate_limit_and_fraud()
-    with rl_patch, fd_patch, vp_patch:
+    rl_patch, fd_patch, vp_patch, mp_patch = _mock_rate_limit_and_fraud()
+    with rl_patch, fd_patch, vp_patch, mp_patch:
         resp = await client.post("/api/v1/auth/login", json={
             "email": "test@example.com",
             "password": "SecureP@ss123",

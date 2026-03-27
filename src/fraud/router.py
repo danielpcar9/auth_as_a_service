@@ -1,8 +1,12 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.db.session import get_db
 from src.fraud.dependencies import get_fraud_service
 from src.fraud.service import FraudService
 from src.fraud.models import FraudPredictionRequest, FraudPredictionResponse
+from src.ml.training import run_training_job, _get_training_status
 
 router = APIRouter(tags=["fraud-detection"])
 
@@ -24,8 +28,7 @@ def predict_fraud(
         user_agent=request.user_agent
     )
     
-    # We could reconstruct the dict, but here logic is embedded
-    is_suspicious = fraud_score > 0.8  # Could read from settings
+    is_suspicious = fraud_score > 0.8
     risk_level = "high" if is_suspicious else "low"
     
     return FraudPredictionResponse(
@@ -37,38 +40,31 @@ def predict_fraud(
 
 @router.post(
     "/train",
-    summary="Train fraud detection model",
-    description="Retrain the fraud detection model with historical data",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Dispatch model training job",
+    description="Dispatches fraud model retraining as a background task. "
+                "Check progress via GET /train/status.",
 )
 async def train_model(
-    service: Annotated[FraudService, Depends(get_fraud_service)]
+    background_tasks: BackgroundTasks,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Train fraud detection model with historical login attempts"""
-    attempts = await service.get_all_for_training(limit=10000)
-    
-    if len(attempts) < 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Not enough data for training. Have {len(attempts)}, need at least 100."
-        )
-    
-    features_list = []
-    for attempt in attempts:
-        features = service.detector.extract_features(
-            email=attempt.email,
-            ip_address=attempt.ip_address,
-            user_agent=attempt.user_agent,
-            timestamp=attempt.attempted_at
-        )
-        features_list.append(list(features.values()))
-    
-    service.retrain_model(features_list)
-    
+    """Dispatch fraud detection model training as a background job."""
+    background_tasks.add_task(run_training_job, db)
     return {
-        "message": "Model trained successfully",
-        "samples_used": len(attempts),
-        "features": list(service.detector.extract_features("test@test.com", "0.0.0.0", None).keys())
+        "message": "Training job dispatched",
+        "status": "pending",
+        "check_status_at": "/api/v1/fraud/train/status",
     }
+
+@router.get(
+    "/train/status",
+    summary="Get training job status",
+    description="Check the current status of the background training job",
+)
+def get_training_status():
+    """Get the current training job status from Redis."""
+    return _get_training_status()
 
 @router.get(
     "/status",

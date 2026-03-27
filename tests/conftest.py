@@ -3,7 +3,6 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from sqlmodel import SQLModel
-import src.models_registry  # ensure all models are registered
 
 from src.db.session import get_db
 from src.main import app

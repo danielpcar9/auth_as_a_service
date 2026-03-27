@@ -1,4 +1,3 @@
-from sqlmodel import SQLModel
 
 # Export SQLModel Base for Alembic to read metadata
 # SQLModel already has the metadata inside its internal declarative base
